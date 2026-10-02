@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f5fa">
+  <meta name="description" content="数独·境，一百关从入门到大师的数独之旅。逐步提示、AI 大师、每日挑战，离线也能玩。">
+  <title>数独 · 境 2.0 | 100 关思维之旅</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="experience.css">
+  <script defer src="engine.js"></script>
+  <script defer src="levels.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <div class="app-shell">
+    <aside class="sidebar glass">
+      <a class="brand" href="#" aria-label="数独境 首页"><span class="brand-mark">境</span><span>数独<span class="brand-dot"> · </span>境<small>SUDOKU ATELIER</small></span></a>
+      <div class="sidebar-intro">给思绪，一点留白。</div>
+      <nav class="desktop-nav" aria-label="主导航">
+        <button class="nav-item active" data-nav="journey"><i data-icon="grid"></i><span>进阶之旅<small>100 个小小的突破</small></span><b>100</b></button>
+        <button class="nav-item" data-nav="daily"><i data-icon="sun"></i><span>每日一题<small>每天，新的灵感</small></span></button>
+        <button class="nav-item" data-nav="learn"><i data-icon="book"></i><span>技巧课堂<small>从会玩，到会思考</small></span></button>
+        <button class="nav-item" data-nav="stats"><i data-icon="chart"></i><span>我的成就<small>记录每一次成长</small></span></button>
+      </nav>
+      <div class="journey-card"><span class="eyebrow">YOUR JOURNEY</span><div class="journey-count"><strong id="side-completed">0</strong><span>/ 100 关</span></div><div class="progress-track"><div id="side-progress"></div></div><p id="side-message">从第一格，走向更远的地方。</p><button class="text-button" data-action="levels">探索关卡 <span>↗</span></button></div>
+      <div class="sidebar-bottom"><span class="online-dot"></span>无需联网 · 随时继续<button class="icon-button" data-action="settings" aria-label="设置"><i data-icon="settings"></i></button></div>
+    </aside>
+    <main class="main">
+      <header class="page-header"><div><div class="eyebrow">A LITTLE FOCUS. A LITTLE WONDER.</div><h1>数字之间，自有答案<span>。</span></h1><p>慢慢来，每一步思考都算数。</p></div><button class="header-settings icon-button glass" data-action="settings" aria-label="游戏设置"><i data-icon="settings"></i></button></header>
+      <header class="mobile-header"><a class="brand" href="#"><span class="brand-mark">境</span><span>数独 · 境</span></a><div><button class="icon-button" data-action="help" aria-label="玩法说明"><i data-icon="help"></i></button><button class="icon-button" data-action="settings" aria-label="游戏设置"><i data-icon="settings"></i></button></div></header>
+      <div class="play-layout">
+        <section class="game-card glass" aria-label="数独游戏">
+          <div class="level-heading"><div><span class="eyebrow" id="chapter-label">CHAPTER 01 · 初见</span><h2 id="level-title">第 01 关 <span>轻轻启程</span></h2></div><button class="level-switch" data-action="levels">关卡地图 <i data-icon="chevron"></i></button></div>
+          <div class="game-meta"><span class="difficulty"><span id="difficulty-dots"></span><span id="difficulty-label">入门</span></span><div class="meta-actions"><span id="mistakes" title="累计错误，不限制尝试次数">错误 0</span><button class="timer-button" data-action="pause" aria-label="暂停游戏"><i data-icon="clock"></i><span id="timer">00:00</span><i data-icon="pause"></i></button></div></div>
+          <div class="board-wrap"><div id="board" class="board" role="grid" aria-label="9乘9数独棋盘"></div><div class="pause-cover" id="pause-cover" hidden><span class="pause-orbit"><i data-icon="moon"></i></span><h3>给大脑放个小假</h3><p>棋盘和时间，都在这里等你。</p><button class="primary" data-action="resume"><i data-icon="play"></i>继续游戏</button></div></div>
+          <div class="board-caption"><span id="board-status"><span class="status-dot"></span>选择一个空格，开始吧</span><button class="tiny-button" data-action="redo" id="redo-button" aria-label="重做"><i data-icon="redo"></i>重做</button></div>
+          <div class="tool-row">
+            <button class="tool" data-action="undo" id="undo-button"><i data-icon="undo"></i><span>撤销</span></button>
+            <button class="tool" data-action="erase"><i data-icon="erase"></i><span>擦除</span></button>
+            <button class="tool" data-action="notes" id="notes-button" aria-pressed="false"><span class="tool-icon"><i data-icon="pencil"></i><b id="note-badge">OFF</b></span><span>笔记</span></button>
+            <button class="tool desktop-auto" data-action="auto-notes"><i data-icon="scan"></i><span>自动笔记</span></button>
+            <button class="tool hint-tool" data-action="hint"><i data-icon="bulb"></i><span>提示 <small>∞</small></span></button>
+            <button class="tool mobile-more" data-action="tools"><i data-icon="sliders"></i><span>工具</span></button>
+          </div>
+          <div class="number-pad" id="number-pad" aria-label="数字键盘"></div>
+          <div class="input-footer"><button data-action="input-mode" id="input-mode"><i data-icon="pointer"></i>先选格，再填数</button><span id="filled-count">已填 56 / 81</span></div>
+          <button class="mobile-ai" data-action="ai"><span class="ai-mini"><i data-icon="sparkles"></i></span><span>AI 大师<small id="mobile-ai-status">换个视角，找到下一步</small></span><i data-icon="chevron"></i></button>
+        </section>
+        <aside class="right-rail">
+          <section class="master-card glass"><div class="card-heading"><span class="ai-avatar"><i data-icon="sparkles"></i></span><div><h3>AI 大师</h3><span class="small-caps">YOUR THINKING PARTNER</span></div><span class="ai-online"></span></div><div class="master-art" aria-hidden="true"><div class="art-orbit orbit-a"></div><div class="art-orbit orbit-b"></div><div class="art-cube"><span>1</span><span>✦</span><span>9</span><span>4</span><span>5</span><span>2</span><span>7</span><span>3</span><span>6</span></div><span class="art-star star-a">✧</span><span class="art-star star-b">✦</span></div><div class="master-copy"><span class="tiny-label">一起想明白</span><h3 id="ai-title">每一格，都有理由。</h3><p id="ai-reason">卡住也没关系。让我带你看见数字背后的线索，一步一步找到答案。</p></div><button class="primary" data-action="hint"><i data-icon="bulb"></i>帮我分析下一步</button><button class="secondary" data-action="ai"><i data-icon="play"></i>观看大师解题</button><div class="master-footnote"><span class="status-dot"></span>本地推理引擎 · 无需 API</div></section>
+          <section class="tip-card"><span class="tiny-label"><i data-icon="leaf"></i>一口小技巧</span><h4 id="tip-title">先从“最满”的地方开始</h4><p id="tip-copy">已知数字越多的行、列或九宫格，往往越容易找到突破口。</p><button class="text-button" data-nav="learn">探索更多技巧 <span>↗</span></button></section>
+          <div class="keyboard-note"><i data-icon="keyboard"></i>数字键填入 · N 笔记 · H 提示<br><span>方向键移动 · Ctrl + Z 撤销</span></div>
+        </aside>
+      </div>
+      <footer class="page-footer"><span>一格一世界，专注即远方。</span><span>SUDOKU ATELIER <b>✦</b></span></footer>
+    </main>
+  </div>
+  <nav class="mobile-nav glass" aria-label="手机导航"><button class="active" data-nav="play"><i data-icon="grid"></i><span>棋盘</span></button><button data-nav="journey"><i data-icon="compass"></i><span>旅程</span></button><button class="nav-master" data-nav="ai"><i data-icon="sparkles"></i><span>AI 大师</span></button><button data-nav="learn"><i data-icon="book"></i><span>学堂</span></button><button data-nav="profile"><i data-icon="user"></i><span>我的</span></button></nav>
+  <dialog id="modal" aria-labelledby="modal-title"><div class="sheet-handle" id="sheet-handle" aria-hidden="true"><span></span></div><div class="modal-header"><button class="icon-button sheet-back" id="panel-back" data-action="back" aria-label="返回上一级" hidden><i data-icon="back"></i></button><div class="sheet-titles"><span class="eyebrow" id="modal-eyebrow"></span><h2 id="modal-title"></h2></div><button class="icon-button" data-action="close" aria-label="收起全部面板"><i data-icon="close"></i></button></div><div class="panel-trail" id="panel-trail" hidden></div><div id="modal-content"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div><div id="celebration" aria-hidden="true"></div>
+  <input type="file" id="import-file" accept=".json,application/json" hidden>
+</body>
+</html>
