@@ -51,13 +51,13 @@
     ['分支验证', '大师', '当当前逻辑技巧无法继续时，对候选数较少的格子建立假设，再沿着假设检查整盘约束；遇到矛盾就回退。AI 会明确标注使用搜索验证的步骤，不把它伪装成简单排除。可以先记笔记，再逐个检查假设。'],
     ['高效操作', '小窍门', '点格子再点数字。开启笔记后，可以给空格添加多个候选数；自动笔记会根据当前棋盘重建候选数。连续填数模式先点一个数字，再逐格填入。撤销和重做支持数字及笔记。按 N 切换笔记，H 打开提示，空格暂停。'],
   ];
-  const defaults = () => ({ version: 2, active: 'level-1', games: {}, results: {}, settings: { sound: false, vibration: true, autoCheck: true, highlight: true, cleanNotes: true, theme: 'light', accent:'violet',material:'frosted',keypad:'double',pace:'snappy',contrast: false, large: false, motion: true, inputMode: 'cell' }, stats: { notes: 0, hints: 0 }, dailySeed: null });
+  const defaults = () => ({ version: 3, atelier:{points:0,days:{},moves:[],wins:[]}, active: 'level-1', games: {}, results: {}, settings: { sound: false, vibration: true, autoCheck: true, highlight: true, cleanNotes: true, theme: 'light', accent:'violet',material:'frosted',keypad:'double',pace:'snappy',contrast: false, large: false, motion: true, inputMode: 'cell' }, stats: { notes: 0, hints: 0 }, dailySeed: null });
   let storageOK = true, data = defaults();
   function normalize(raw) {
-    if (!raw || ![1,2].includes(raw.version) || typeof raw.games !== 'object' || !raw.games || typeof raw.results !== 'object' || !raw.results) throw Error('存档格式不正确');
+    if (!raw || ![1,2,3].includes(raw.version) || typeof raw.games !== 'object' || !raw.games || typeof raw.results !== 'object' || !raw.results) throw Error('存档格式不正确');
     const out = defaults(), keys = Object.keys(raw.games);
     if (keys.length > 600) throw Error('存档内容过多');
-    const isKey = k => /^level-([1-9]\d?|100)$/.test(k) || /^daily-\d{4}-\d{2}-\d{2}$/.test(k) || /^practice-([1-9]\d?|100)$/.test(k);
+    const isKey = k => /^challenge-(sprint|perfect|zen)-[1-3]-\d{4}-\d{2}-\d{2}$/.test(k) || /^level-([1-9]\d?|100)$/.test(k) || /^daily-\d{4}-\d{2}-\d{2}$/.test(k) || /^practice-([1-9]\d?|100)$/.test(k);
     const nums = (a, max) => Array.isArray(a) && a.length === 81 && a.every(n => Number.isInteger(n) && n >= 0 && n <= max);
     for (const k of keys) {
       if (!isKey(k)) continue;
@@ -66,9 +66,9 @@
       const puzzle = [...g.puzzle].map(Number), solution = [...g.solution].map(Number);
       if (!S.valid(solution) || puzzle.some((v,i) => v && (v !== solution[i] || g.board[i] !== v)) || S.solve(puzzle,2).count !== 1) throw Error('题目校验未通过');
       // Valid earlier puzzles stay playable after a difficulty-pack update.
-      const replacement=k.startsWith('daily')?null:LEVELS[Number(k.split('-')[1])-1];
+      const replacement=k.startsWith('daily')||k.startsWith('challenge')?null:LEVELS[Number(k.split('-')[1])-1];
       if((g.edition||1)<2&&replacement&&!g.completed&&!g.mistakes&&!g.hints&&!g.history?.length&&g.board.every((v,i)=>v===puzzle[i])&&g.notes.every(v=>!v)){out.games[k]=makeGame(replacement,k);continue;}
-      out.games[k] = { ...makeGame(g, k), edition:g.edition||1,aiFilled:clamp(g.aiFilled,0,99999),board: g.board.slice(), notes: g.notes.slice(), elapsed: clamp(g.elapsed,0,31536000), mistakes: clamp(g.mistakes,0,99999), hints: clamp(g.hints,0,99999), completed: !!g.completed && g.board.every((v,i)=>v===solution[i]), selected: clamp(g.selected,-1,80), history: [], future: [] };
+      out.games[k] = { ...makeGame(g, k),failed:!!g.failed,streak:clamp(g.streak,0,81),peakStreak:clamp(g.peakStreak,0,81),credited:Array.isArray(g.credited)?[...new Set(g.credited.filter(i=>Number.isInteger(i)&&i>=0&&i<81))]:[],units:Array.isArray(g.units)?[...new Set(g.units.filter(i=>Number.isInteger(i)&&i>=0&&i<27))]:[], edition:g.edition||1,aiFilled:clamp(g.aiFilled,0,99999),board: g.board.slice(), notes: g.notes.slice(), elapsed: clamp(g.elapsed,0,31536000), mistakes: clamp(g.mistakes,0,99999), hints: clamp(g.hints,0,99999), completed: !!g.completed && g.board.every((v,i)=>v===solution[i]), selected: clamp(g.selected,-1,80), history: [], future: [] };
       for (const type of ['history','future']) if (Array.isArray(g[type])) out.games[k][type] = g[type].slice(-150).filter(h => h && nums(h.board,9) && nums(h.notes,511) && !puzzle.some((v,i)=>v&&h.board[i]!==v)).map(h => ({ board:h.board.slice(),notes:h.notes.slice(),selected:clamp(h.selected,0,80) }));
     }
     for (const [k,r] of Object.entries(raw.results)) if (isKey(k) && r && !k.startsWith('practice')) out.results[k] = { stars:clamp(r.stars,1,3),time:clamp(r.time,0,31536000),mistakes:clamp(r.mistakes,0,99999),hints:clamp(r.hints,0,99999),aiAssisted:!!r.aiAssisted,independent:r.independent===true||(!r.aiAssisted&&!r.hints),date:typeof r.date==='string'?r.date.slice(0,10):'',clears:clamp(r.clears,1,9999) };
@@ -79,13 +79,18 @@
     for(const [k,values] of Object.entries({accent:['violet','mint','peach'],material:['frosted','clear','solid'],keypad:['double','single'],pace:['snappy','gentle']}))if(values.includes(s[k]))out.settings[k]=s[k];
     out.active = typeof raw.active==='string' && out.games[raw.active] ? raw.active : 'level-1';
     out.stats = { notes:clamp(raw.stats?.notes,0,999999),hints:clamp(raw.stats?.hints,0,999999) };
+    const a=raw.atelier||{};
+    out.atelier.points=clamp(a.points,0,9999999);
+    for(const [day,d] of Object.entries(a.days||{}).slice(-730))if(/^\d{4}-\d{2}-\d{2}$/.test(day)&&d)out.atelier.days[day]={cells:clamp(d.cells,0,99999),peak:clamp(d.peak,0,81),wins:clamp(d.wins,0,999),units:clamp(d.units,0,99999),claimed:Array.isArray(d.claimed)?[...new Set(d.claimed.filter(k=>['cells','steady','win'].includes(k)))]:[]};
+    out.atelier.moves=Array.isArray(a.moves)?[...new Set(a.moves.filter(v=>typeof v==='string'&&v.length<90))].slice(-60000):[];
+    out.atelier.wins=Array.isArray(a.wins)?[...new Set(a.wins.filter(isKey))].slice(-2000):[];
     return out;
   }
   function clamp(n,a,b) { return Number.isFinite(n)?Math.min(b,Math.max(a,Math.floor(n))):a; }
   try { const saved = localStorage.getItem(KEY); if (saved) { const raw=JSON.parse(saved);if(raw.version===1&&!localStorage.getItem(KEY+'-backup'))localStorage.setItem(KEY+'-backup',saved);data = normalize(raw); } } catch(e) { storageOK = false; }
   let game, selected = -1, noteMode = false, heldNumber = 0, paused = false, screen = '', chapterTab = 0, hintStep = null, hintFocus = [], demo = null, aiTimer = null, aiRunning = false, aiSpeed = 850, aiSteps = 0, lastTick = performance.now(), toastTimer = null, audio = null, lastFocus = null, pendingConfirm = null;
   const panelStack=[];let analysisStep=null,selectedLevel=1,answerMode='all',drag=null,dragFrame=0;
-  function makeGame(p, key) { return { key, edition:p.edition||2,aiFilled:0,puzzle:p.puzzle, solution:p.solution, board:[...p.puzzle].map(Number),notes:Array(81).fill(0),elapsed:0,mistakes:0,hints:0,selected:-1,history:[],future:[],completed:false }; }
+  function makeGame(p, key) { return { key, edition:p.edition||2,aiFilled:0,puzzle:p.puzzle, solution:p.solution, board:[...p.puzzle].map(Number),notes:Array(81).fill(0),elapsed:0,mistakes:0,hints:0,selected:-1,history:[],future:[],completed:false,failed:false,streak:0,peakStreak:0,credited:[],units:[] }; }
   function currentId() { return Number(game.key.split('-')[1]) || 1; }
   function unlocked() { let n = 1; while (n < 100 && data.results[`level-${n}`]) n++; return n; }
   function isPractice() { return game.key.startsWith('practice'); }
@@ -101,12 +106,13 @@
     if(game)save();
     if(!data.games[key]) {
       let puzzle;
-      if(key.startsWith('daily')) { const seed=Number(key.slice(6).replaceAll('-',''));puzzle=S.generate(seed,30+seed%4); }
+      if(key.startsWith('challenge')) puzzle=modePuzzle(key);
+      else if(key.startsWith('daily')) { const seed=Number(key.slice(6).replaceAll('-',''));puzzle=S.generate(seed,30+seed%4); }
       else puzzle=LEVELS[Number(key.split('-')[1])-1];
       if(!puzzle)return;
       data.games[key]=makeGame(puzzle,key);
     }
-    game=data.games[key]; data.active=key;selected=game.selected;noteMode=false;heldNumber=0;hintFocus=[];paused=false;lastTick=performance.now();closeModal();render();save();
+    game=data.games[key]; data.active=key;selected=game.selected;noteMode=false;heldNumber=0;hintFocus=[];paused=false;lastTick=performance.now();closeModal(true);render();save();
   }
   function applySettings() {
     document.body.dataset.theme=data.settings.theme;
@@ -146,10 +152,11 @@
     $('pause-cover').hidden=!paused;
     $('filled-count').textContent=`已填 ${game.board.filter(Boolean).length} / 81`;
     $('mistakes').textContent=`错误 ${game.mistakes}`;
-    $('timer').textContent=formatTime(game.elapsed);
+    $('timer').textContent=challengeInfo()?.kind==='zen'?'∞':formatTime(game.elapsed);
     $('input-mode').innerHTML=icon('pointer')+(data.settings.inputMode==='number'?'连续填数 · 先选数字':'先选格，再填数');
+    renderInspiration();
     const status=$('board-status');status.classList.toggle('demo-ribbon',!!demo);
-    status.innerHTML=`<span class="status-dot"></span>${demo?'AI 演示中 · 不计入闯关成绩':game.completed?'本题已完成，继续下一段旅程':noteMode?'笔记模式 · 再点一次数字可取消':data.settings.inputMode==='number'?(heldNumber?`连续填入 ${heldNumber} · 点击空格`:'先选择下方数字，再点空格'):selected>=0?S.name(selected)+(Number(game.puzzle[selected])?' · 已知数字':' · 等待你的答案'):'选择一个空格，开始吧'}`;
+    status.innerHTML=`<span class="status-dot"></span>${demo?'AI 演示中 · 不计入闯关成绩':game.failed?'本次挑战已结束 · 点击上方切换玩法':game.completed?'本题已完成，继续下一段旅程':noteMode?'笔记模式 · 再点一次数字可取消':data.settings.inputMode==='number'?(heldNumber?`连续填入 ${heldNumber} · 点击空格`:'先选择下方数字，再点空格'):selected>=0?S.name(selected)+(Number(game.puzzle[selected])?' · 已知数字':' · 等待你的答案'):'选择一个空格，开始吧'}`;
   }
   function render() {
     const c=CHAPTERS[Math.floor((currentId()-1)/10)]||CHAPTERS[0],lvl=LEVELS[currentId()-1];
@@ -159,12 +166,13 @@
     $('difficulty-label').textContent=isDaily()?'每日挑战':c[2];
     $('difficulty-dots').innerHTML=Array.from({length:6},(_,i)=>`<b class="difficulty-dot ${i<tier?'on':''}"></b>`).join('');
     $('difficulty-label').title=`逻辑等级 ${tier}/6`;
+    const mode=challengeInfo();if(mode){$('chapter-label').textContent='THE DAILY ATELIER · '+mode.day;$('level-title').innerHTML=mode.title+' <span>'+['轻松','适中','深入'][mode.difficulty-1]+'</span>';$('difficulty-label').textContent=mode.tag;}
     const count=Object.keys(data.results).filter(k=>k.startsWith('level')).length;
     $('side-completed').textContent=count;$('side-progress').style.width=count+'%';
     $('side-message').textContent=count===100?'一百次突破，你已抵达归一之境。':`下一站：第 ${unlocked()} 关 · ${CHAPTERS[Math.floor((unlocked()-1)/10)][0]}`;
     document.querySelectorAll('[data-nav]').forEach(e=>e.classList.toggle('active',e.closest('.mobile-nav')?e.dataset.nav==='play':e.dataset.nav===(isDaily()?'daily':'journey')));
     const tip=Math.min(6,Math.max(1,tier));$('tip-title').textContent=LESSONS[tip][0];$('tip-copy').textContent=LESSONS[tip][2].split('。')[0]+'。';
-    renderBoard();
+    renderBoard();syncNavLens();
   }
   function toast(s) { $('toast').textContent=s;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),2600); }
   function feedback(type='tap') {
@@ -173,7 +181,7 @@
     try{audio=audio||new(window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.value=type==='error'?180:type==='win'?784:440+Math.random()*100;g.gain.setValueAtTime(.035,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.13);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+.15);}catch(e){}
   }
   function remember() { game.history.push({board:game.board.slice(),notes:game.notes.slice(),selected});if(game.history.length>150)game.history.shift();game.future=[]; }
-  function canEdit() { if(paused){toast('先继续游戏，再填写数字');return false;}if(demo){toast('大师正在演示，返回棋盘后可继续填写');return false;}if(game.completed){toast('这一题已经完成，去关卡地图继续吧');return false;}return true; }
+  function canEdit() { if(game.failed){toast('这次挑战已结束，请重新挑战或切换玩法');return false;}if(challengeInfo()?.kind==='sprint'&&game.elapsed>=180&&!game.completed&&!demo){failChallenge('三分钟到了，这次的思考值得保留。');return false;} if(paused){toast('先继续游戏，再填写数字');return false;}if(demo){toast('大师正在演示，返回棋盘后可继续填写');return false;}if(game.completed){toast('这一题已经完成，去关卡地图继续吧');return false;}return true; }
   function selectCell(i) { if(paused||demo)return;selected=i;hintFocus=[];if(data.settings.inputMode==='number'&&heldNumber&&!Number(game.puzzle[i]))input(heldNumber);else{renderBoard();save();} }
   function input(n) {
     if(!canEdit())return;
@@ -190,8 +198,8 @@
     if(n&&!correct){game.mistakes++;if(data.settings.autoCheck)feedback('error');}
     else feedback();
     if(n&&correct&&data.settings.cleanNotes)S.peers[selected].forEach(i=>game.notes[i]&=~(1<<(n-1)));
-    renderBoard();if(n)$('board').children[selected].classList.add('pop');
-    if(n&&correct&&S.units.some(u=>u.includes(selected)&&u.every(i=>game.board[i]===Number(game.solution[i])))){$('board').classList.remove('breathe');void $('board').offsetWidth;$('board').classList.add('breathe');}
+    journalMove(n,correct);renderBoard();if(n)$('board').children[selected].classList.add('pop');
+    if(n&&!correct&&challengeInfo()?.kind==='perfect'){failChallenge('这次有一格填错了。先确认，再落笔。');return;}
     checkWin();save();
   }
   function history(dir) {
@@ -200,39 +208,47 @@
   }
   function autoNotes() {if(!canEdit())return;remember();game.notes=S.candidates(game.board);data.stats.notes++;renderBoard();save();toast('已根据当前棋盘重新生成候选数');}
   function openModal(kind,title,eyebrow,html,root=false) {
-    const wasOpen=$('modal').open;
+    const wasOpen=$('modal').open&&!panelClosing;panelEpoch++;panelClosing=false;$('modal').classList.remove('is-closing');M.stop($('modal'));
     if(!wasOpen){lastFocus=document.activeElement;panelStack.length=0;}
     else if(root)panelStack.length=0;
     else if(screen!==kind)panelStack.push({kind:screen,title:$('modal-title').textContent,eyebrow:$('modal-eyebrow').textContent,html:$('modal-content').innerHTML,scroll:$('modal-content').scrollTop,focus:document.activeElement?.outerHTML});
     if(screen==='ai'&&kind!=='ai'){stopAI();if(demo)endDemo(false);}
     screen=kind;$('modal-title').textContent=title;$('modal-eyebrow').textContent=eyebrow;$('modal-content').innerHTML=html;icons($('modal'));$('modal').dataset.screen=kind;updatePanelChrome();
-    if(!wasOpen)$('modal').showModal();$('modal-content').scrollTop=0;document.body.classList.add('panel-open');
+    if(!$('modal').open)$('modal').showModal();$('modal-content').scrollTop=0;document.body.classList.add('panel-open');
     animatePanel(wasOpen?1:0);$('modal-content').querySelector('button:not(:disabled),input,select')?.focus({preventScroll:true});
   }
   function animatePanel(direction){
-    if(!data.settings.motion||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-    const el=direction===0?$('modal'):$('modal-content');const time=data.settings.pace==='gentle'?320:220;
-    el.animate(direction===0?[{opacity:0,transform:'translateY(28px) scale(.98)'},{opacity:1,transform:'translateY(0) scale(1)'}]:[{opacity:.2,transform:`translateX(${direction*18}px)`},{opacity:1,transform:'translateX(0)'}],{duration:time,easing:'cubic-bezier(.2,.8,.2,1)'});
+    const slow=data.settings.pace==='gentle',el=$('modal');
+    if(direction===0){M.set(el,{y:matchMedia('(max-width:760px)').matches?Math.min(el.offsetHeight,600):28,scale:matchMedia('(max-width:760px)').matches?1:.97,opacity:0});M.to(el,{y:0,scale:1,opacity:1},{stiffness:slow?240:420,damping:slow?31:41});}
+    else {M.to(el,{y:0,scale:1,opacity:1});const content=$('modal-content');M.set(content,{x:direction*24,opacity:.25});M.to(content,{x:0,opacity:1},{stiffness:slow?260:450,damping:slow?33:43});}
+    celebrationMotion();
   }
   function updatePanelChrome(){
     $('panel-back').hidden=!panelStack.length;$('panel-trail').hidden=!panelStack.length;
     $('panel-trail').textContent=panelStack.map(p=>p.title).join('  /  ');$('modal').dataset.depth=String(panelStack.length);
-    document.querySelectorAll('.mobile-nav [data-nav]').forEach(e=>e.classList.toggle('active',e.dataset.nav===(!screen?'play':['journey','chapter','level-detail','daily'].includes(screen)?'journey':['ai','ai-home','analysis','answer','hint'].includes(screen)?'ai':['learn','lesson'].includes(screen)?'learn':'profile')));
+    requestAnimationFrame(syncNavLens);
+    document.querySelectorAll('.mobile-nav [data-nav]').forEach(e=>e.classList.toggle('active',e.dataset.nav===(!screen?'play':['journey','chapter','level-detail','daily','challenges','mode-detail','challenge-end','challenge-win'].includes(screen)?'journey':['ai','ai-home','analysis','answer','hint'].includes(screen)?'ai':['learn','lesson'].includes(screen)?'learn':'profile')));
   }
   function backPanel(){
+    panelEpoch++;panelClosing=false;$('modal').classList.remove('is-closing');M.to($('modal'),{y:0,opacity:1,scale:1});
     if(!panelStack.length){closeModal();return;}
     if(screen==='ai'){stopAI();if(demo)endDemo(false);}
     const p=panelStack.pop();screen=p.kind;$('modal-title').textContent=p.title;$('modal-eyebrow').textContent=p.eyebrow;$('modal-content').innerHTML=p.html;$('modal').dataset.screen=screen;
     $('modal-content').querySelectorAll('[data-setting]').forEach(e=>{if(e.type==='checkbox')e.checked=data.settings[e.dataset.setting];else e.value=data.settings[e.dataset.setting];});
     icons($('modal'));updatePanelChrome();$('modal-content').scrollTop=p.scroll;animatePanel(-1);$('modal-content').querySelector('button:not(:disabled),input,select')?.focus({preventScroll:true});renderBoard();
   }
-  function closeModal() { if(screen==='ai'){stopAI();if(demo)endDemo(false);}cancelAnimationFrame(dragFrame);$('modal').style.transform='';$('modal').close();panelStack.length=0;screen='';hintFocus=[];hintStep=null;document.body.classList.remove('panel-open');updatePanelChrome();if(game)renderBoard();if(lastFocus&&document.contains(lastFocus))lastFocus.focus({preventScroll:true});lastTick=performance.now(); }
+  function closeModal(immediate=false) {
+    if(screen==='ai'){stopAI();if(demo)endDemo(false);}cancelAnimationFrame(dragFrame);drag=null;
+    const el=$('modal'),epoch=++panelEpoch;panelClosing=el.open;el.classList.add('is-closing');panelStack.length=0;screen='';hintFocus=[];hintStep=null;document.body.classList.remove('panel-open');updatePanelChrome();if(game)renderBoard();lastTick=performance.now();
+    const finish=()=>{if(epoch!==panelEpoch)return;el.close();panelClosing=false;el.classList.remove('is-closing');M.set(el,{x:0,y:0,scale:1,opacity:1});if(lastFocus&&document.contains(lastFocus))lastFocus.focus({preventScroll:true});};
+    if(immediate||!el.open||!M.enabled())finish();else M.to(el,{y:matchMedia('(max-width:760px)').matches?el.offsetHeight+35:25,opacity:0,scale:matchMedia('(max-width:760px)').matches?1:.98},{stiffness:490,damping:44,done:finish});
+  }
   function confirmAction(title,copy,label,fn) {pendingConfirm=fn;openModal('confirm',title,'A MOMENT TO DECIDE',`<p class="modal-description">${copy}</p><div class="modal-actions"><button class="secondary" data-action="close">再想一下</button><button class="primary" data-action="confirm">${label}</button></div>`);}
   function menuRow(action,glyph,title,copy,tag=''){return `<button class="menu-row" data-action="${action}"><span class="menu-icon">${icon(glyph)}</span><span><strong>${title}</strong><small>${copy}</small></span>${tag?`<b>${tag}</b>`:''}<i>${icon('chevron')}</i></button>`;}
   function showLevels(chapter){
     if(chapter!==undefined){showChapter(chapter);return;}
     const done=Object.keys(data.results).filter(k=>k.startsWith('level')).length;
-    openModal('journey','一百关，一场进阶','YOUR JOURNEY',`<div class="journey-hero"><div><span class="tiny-label">下一段风景</span><h3>第 ${String(unlocked()).padStart(2,'0')} 关 <span>· ${CHAPTERS[Math.floor((unlocked()-1)/10)][0]}</span></h3><p>从轻松落笔，到深度推演。</p><button class="primary" data-action="continue-journey">继续我的旅程 ${icon('chevron')}</button></div><div class="progress-orbit" style="--progress:${done*3.6}deg"><strong>${done}<small>/ 100</small></strong></div></div><div class="menu-group">${menuRow('daily','sun','每日一题','每天一题，独立记录你的专注','TODAY')}</div><div class="section-heading"><span>十段旅程</span><small>点击章节，再挑选关卡</small></div><div class="chapter-list">${CHAPTERS.map((c,i)=>{const count=Array.from({length:10},(_,j)=>data.results[`level-${i*10+j+1}`]).filter(Boolean).length;return `<button class="chapter-card ${i===9?'chapter-final':''}" data-chapter="${i}"><span class="chapter-number">${String(i+1).padStart(2,'0')}</span><span><strong>${c[0]}<small>${c[2]}</small></strong><p>${i*10+1}–${i*10+10} 关 · ${i===0?'只需 8–17 步基础填数':i===9?'极限推演，考验你的上限':c[1]}</p><span class="chapter-progress"><b style="width:${count*10}%"></b></span></span><i>${icon('chevron')}</i></button>`;}).join('')}</div>`,true);
+    openModal('journey','一百关，一场进阶','YOUR JOURNEY',`<div class="journey-hero"><div><span class="tiny-label">下一段风景</span><h3>第 ${String(unlocked()).padStart(2,'0')} 关 <span>· ${CHAPTERS[Math.floor((unlocked()-1)/10)][0]}</span></h3><p>从轻松落笔，到深度推演。</p><button class="primary" data-action="continue-journey">继续我的旅程 ${icon('chevron')}</button></div><div class="progress-orbit" style="--progress:${done*3.6}deg"><strong>${done}<small>/ 100</small></strong></div></div><div class="menu-group">${menuRow('challenges','sparkles','灵感游乐场','三种新玩法 · 每日目标 · 收集星尘','NEW')}${menuRow('daily','sun','每日一题','每天一题，独立记录你的专注','TODAY')}</div><div class="section-heading"><span>十段旅程</span><small>点击章节，再挑选关卡</small></div><div class="chapter-list">${CHAPTERS.map((c,i)=>{const count=Array.from({length:10},(_,j)=>data.results[`level-${i*10+j+1}`]).filter(Boolean).length;return `<button class="chapter-card ${i===9?'chapter-final':''}" data-chapter="${i}"><span class="chapter-number">${String(i+1).padStart(2,'0')}</span><span><strong>${c[0]}<small>${c[2]}</small></strong><p>${i*10+1}–${i*10+10} 关 · ${i===0?'只需 8–17 步基础填数':i===9?'极限推演，考验你的上限':c[1]}</p><span class="chapter-progress"><b style="width:${count*10}%"></b></span></span><i>${icon('chevron')}</i></button>`;}).join('')}</div>`,true);
   }
   function showChapter(chapter){chapterTab=Math.min(9,Math.max(0,chapter));const c=CHAPTERS[chapterTab];
     openModal('chapter',`${c[0]} · ${c[1]}`,`CHAPTER ${String(chapterTab+1).padStart(2,'0')}`,`<div class="chapter-banner"><span class="chapter-big">${String(chapterTab+1).padStart(2,'0')}</span><div><span class="difficulty-pill">${c[2]}</span><p>${chapterTab===0?'很简单的十次开始。每关只需填入 8–17 个数字，建立你的第一份信心。':c[3]}</p></div></div><div class="level-grid">${Array.from({length:10},(_,i)=>{const n=chapterTab*10+i+1,r=data.results[`level-${n}`],locked=n>unlocked();return `<button class="level-tile ${locked?'locked':r?'done':''} ${n===currentId()&&!isDaily()?'current':''}" data-level="${n}" aria-label="第 ${n} 关"><strong>${String(n).padStart(2,'0')}</strong><small>${r?'★'.repeat(r.stars)+'☆'.repeat(3-r.stars):locked?'可练习':'可挑战'}</small></button>`;}).join('')}</div><p class="resume-note">逐关解锁正式挑战，也能提前自由练习。<br>点击关卡，查看难度与挑战详情。</p>`);
@@ -322,11 +338,11 @@
     const entries=Object.entries(data.results),levels=entries.filter(([k])=>k.startsWith('level')),stars=levels.reduce((s,[,r])=>s+r.stars,0),daily=entries.filter(([k])=>k.startsWith('daily'));
     const achievements=[['第一束光','完成你的第一关',levels.length>=1],['十步成章','完成 10 个闯关关卡',levels.length>=10],['行至半程','完成 50 个闯关关卡',levels.length>=50],['归一之境','完成全部 100 关',levels.length===100],['完美主义','在任意闯关关卡获得 3 星',levels.some(([,r])=>r.stars===3)],['候选观察家','使用笔记或自动笔记 10 次',data.stats.notes>=10],['每日仪式','累计完成 7 道每日挑战',daily.length>=7],['独立推理','独立完成第 90 关或更高关卡',levels.some(([k,r])=>Number(k.slice(6))>=90&&r.independent)]];
     if(view==='overview'){openModal('stats','每一步，都算数','YOUR LITTLE MILESTONES',`<div class="stats-grid"><div class="stat-box"><strong>${levels.length}</strong><span>通关 / 100</span></div><div class="stat-box"><strong>${stars}</strong><span>星星 / 300</span></div><div class="stat-box"><strong>${daily.length}</strong><span>每日挑战</span></div></div><div class="menu-group spaced">${menuRow('badges','trophy','成长徽章','每一次突破，都值得被看见',achievements.filter(a=>a[2]).length+'/8')}${menuRow('records','chart','通关记录','查看成绩、用时与辅助标记')}${menuRow('scoring','shield','星级与记录规则','了解独立通关和 AI 辅助的区别')}</div>`);return;}
-    if(view==='records'){openModal('records','我走过的足迹','YOUR RECORDS',entries.length?entries.slice().reverse().map(([k,r])=>`<div class="record-row"><span>${k.startsWith('daily')?'每日 '+k.slice(6):'第 '+k.slice(6)+' 关'}<small>${'★'.repeat(r.stars)} · ${r.aiAssisted?'AI 辅助':r.hints?'使用提示':'独立完成'}</small></span><span>${formatTime(r.time)}</span></div>`).join(''):'<div class="empty-state">第一枚星星，正在等你。</div>');return;}
+    if(view==='records'){openModal('records','我走过的足迹','YOUR RECORDS',entries.length?entries.slice().reverse().map(([k,r])=>`<div class="record-row"><span>${k.startsWith('challenge')?challengeInfo(k).title+' · '+['轻松','适中','深入'][challengeInfo(k).difficulty-1]:k.startsWith('daily')?'每日 '+k.slice(6):'第 '+k.slice(6)+' 关'}<small>${'★'.repeat(r.stars)} · ${r.aiAssisted?'AI 辅助':r.hints?'使用提示':'独立完成'}</small></span><span>${formatTime(r.time)}</span></div>`).join(''):'<div class="empty-state">第一枚星星，正在等你。</div>');return;}
     openModal('badges','让成长，留下印记','YOUR BADGES',`<p class="modal-description">已点亮 ${achievements.filter(a=>a[2]).length} / 8 枚成长徽章。</p>${achievements.map(a=>`<div class="achievement ${a[2]?'earned':''}"><span class="medal">${icon(a[2]?'trophy':'lock')}</span><div><h4>${a[0]}</h4><p>${a[1]}</p></div><span>${a[2]?'已点亮':'待点亮'}</span></div>`).join('')}`);
   }
   function showSettings() {
-    openModal('settings','把这里，变成你的','PREFERENCES',`<div class="settings-hero"><span class="glass-gem">${icon('palette')}</span><div><h3>你的手感，你的风格。</h3><p>每个选择，都即时生效。</p></div></div><div class="menu-group">${menuRow('settings-appearance','palette','外观与光影','毛玻璃、主题色与昼夜模式')}${menuRow('settings-controls','pointer','输入与棋盘','键盘布局、填写方式与辅助')}${menuRow('settings-feedback','zap','速度与反馈','切换节奏、触感和音效')}${menuRow('settings-access','target','显示与可读性','大字、对比度与动态效果')}${menuRow('settings-data','shield','存档与数据','导出、导入与版本信息')}</div><p class="resume-note">SUDOKU ATELIER 2.0 · 随心而动</p>`);
+    openModal('settings','把这里，变成你的','PREFERENCES',`<div class="settings-hero"><span class="glass-gem">${icon('palette')}</span><div><h3>你的手感，你的风格。</h3><p>每个选择，都即时生效。</p></div></div><div class="menu-group">${menuRow('settings-appearance','palette','外观与光影','毛玻璃、主题色与昼夜模式')}${menuRow('settings-controls','pointer','输入与棋盘','键盘布局、填写方式与辅助')}${menuRow('settings-feedback','zap','速度与反馈','切换节奏、触感和音效')}${menuRow('settings-access','target','显示与可读性','大字、对比度与动态效果')}${menuRow('settings-data','shield','存档与数据','导出、导入与版本信息')}</div><p class="resume-note">SUDOKU ATELIER 3.0 · 随心而动</p>`);
   }
   function choiceCards(key,items){return `<div class="choice-cards">${items.map(([v,title,copy])=>`<button class="choice-card ${data.settings[key]===v?'chosen':''}" data-preference="${key}" data-value="${v}" aria-pressed="${data.settings[key]===v}"><span class="choice-sample ${key}-${v}">${key==='accent'?'':key==='material'?'境':key==='keypad'?(v==='double'?'1 2 3 4 5':'1 2 3 ···'):key==='inputMode'?(v==='cell'?'□ → 5':'5 → □'):'✦'}</span><strong>${title}</strong><small>${copy}</small><b>${icon('check')}</b></button>`).join('')}</div>`;}
   function showSettingsSection(section) {
@@ -335,31 +351,98 @@
     const content={
       appearance:['外观与光影',`<div class="material-preview"><span class="preview-orb"></span><div class="preview-glass">境<small>LET THE LIGHT IN</small></div></div><p class="section-label">一抹色彩</p>${choiceCards('accent',[['violet','雾紫','静谧与专注'],['mint','青玉','清透与呼吸'],['peach','暖杏','温柔与留白']])}<p class="section-label">玻璃质感</p>${choiceCards('material',[['frosted','磨砂','柔和透光'],['clear','水晶','通透折光'],['solid','纯净','清晰实色']])}<div class="setting-row"><label for="theme-select">昼夜模式<small>相同的安静，不同的光线。</small></label><select id="theme-select" data-setting="theme"><option value="light" ${s.theme==='light'?'selected':''}>白昼</option><option value="night" ${s.theme==='night'?'selected':''}>月夜</option></select></div>`],
       controls:['输入与棋盘',`<p class="section-label">手机数字键盘</p>${choiceCards('keypad',[['double','双排大键','大拇指更从容'],['single','经典单排','棋盘更紧凑']])}<p class="section-label">填写习惯</p>${choiceCards('inputMode',[['cell','先选格','选格子，再填数'],['number','连续填数','选数字，依次填']])}${setting('autoCheck','即时错误提醒','错误会标色；关闭后仍累计错误次数。')}${setting('highlight','关联数字高亮','同行、同列、同宫，以及相同数字。')}${setting('cleanNotes','自动清理候选数','正确填写后，清理相关笔记。')}`],
-      feedback:['速度与反馈',`<p class="section-label">面板切换节奏</p>${choiceCards('pace',[['snappy','轻快','220 ms，即点即应'],['gentle','舒缓','320 ms，柔和过渡']])}${setting('sound','轻柔音效','填入数字与完成时的微小回声。')}${setting('vibration','触感反馈','设备支持时，提供轻微振动。')}<div class="coach-note">${icon('zap')}<p>数字输入即时响应。AI 解题的播放速度，可以在演示面板中单独调整。</p></div>`],
+      feedback:['速度与反馈',`<p class="section-label">面板切换节奏</p>${choiceCards('pace',[['snappy','轻快','紧致弹簧，即点即应'],['gentle','舒缓','舒展弹簧，柔和衔接']])}${setting('sound','轻柔音效','填入数字与完成时的微小回声。')}${setting('vibration','触感反馈','设备支持时，提供轻微振动。')}<div class="coach-note">${icon('zap')}<p>数字输入即时响应。AI 解题的播放速度，可以在演示面板中单独调整。</p></div>`],
       access:['显示与可读性',`${setting('contrast','增强对比','让数字、边界和候选数更清楚。')}${setting('large','加大数字','提升棋盘与笔记字号。')}${setting('motion','柔和动效','关闭后保留即时状态反馈。')}<p class="storage-note">系统开启减少动态效果时，游戏会自动减少移动。减少透明度偏好也会被尊重。</p>`],
-      data:['存档与数据',`<div class="save-status">${icon('shield')}<span><strong>${storageOK?'进度已自动保存':'请导出一份备份'}</strong><small>当前棋盘与历史关卡分别保存</small></span></div><div class="menu-group">${menuRow('export','download','导出存档','保存一份可转移的 JSON 备份')}${menuRow('import','restart','导入存档','校验后恢复另一台设备的进度')}${menuRow('restart','restart','重玩当前关卡','保留已获得的星星和解锁进度')}</div><p class="storage-note">2.0 版包含重新分级的 100 道题。旧版未完成的棋盘继续保留，重玩时进入新版题目。不同浏览器和地址使用各自的存档。备份可在设备之间转移。</p>`],
+      data:['存档与数据',`<div class="save-status">${icon('shield')}<span><strong>${storageOK?'进度已自动保存':'请导出一份备份'}</strong><small>当前棋盘与历史关卡分别保存</small></span></div><div class="menu-group">${menuRow('export','download','导出存档','保存一份可转移的 JSON 备份')}${menuRow('import','restart','导入存档','校验后恢复另一台设备的进度')}${menuRow('restart','restart','重玩当前关卡','保留已获得的星星和解锁进度')}</div><p class="storage-note">3.0 版新增灵感游乐场、每日目标与流体动效，兼容之前的存档。旧版未完成的棋盘继续保留，重玩时进入新版题目。不同浏览器和地址使用各自的存档。备份可在设备之间转移。</p>`],
     }[section];
     openModal('settings-'+section,content[0],'PREFERENCES · '+section.toUpperCase(),content[1]);
   }
-  function showProfile(){openModal('profile','属于你的，专注时光','YOUR SPACE',`<div class="profile-hero"><span>${icon('user')}</span><h3>每一格，都是成长。</h3><p>下一站，第 ${unlocked()} 关。</p></div><div class="menu-group">${menuRow('stats','chart','我的进阶','星星、徽章和通关记录')}${menuRow('daily','sun','每日时光','今天的一道小挑战')}${menuRow('settings','settings','偏好设置','外观、输入、声音与存档')}${menuRow('help','book','玩法与技巧','从规则到大师级推理')}</div>`,true);}
+  function showProfile(){openModal('profile','属于你的，专注时光','YOUR SPACE',`<div class="profile-hero"><span>${icon('user')}</span><h3>每一格，都是成长。</h3><p>下一站，第 ${unlocked()} 关。</p></div><div class="menu-group">${menuRow('stats','chart','我的进阶','星星、徽章和通关记录')}${menuRow('challenges','sparkles','灵感游乐场','速解、无误、禅意与每日小目标')}${menuRow('settings','settings','偏好设置','外观、输入、声音与存档')}${menuRow('help','book','玩法与技巧','从规则到大师级推理')}</div>`,true);}
   function showTools(){openModal('tools','棋盘工具箱','LITTLE TOOLS · BETTER FOCUS',`<div class="tool-panel-grid"><button data-action="tool-auto-notes">${icon('scan')}<strong>自动笔记</strong><small>重新计算全部候选数</small></button><button data-action="tool-check">${icon('shield')}<strong>检查棋盘</strong><small>定位当前错误，不揭晓答案</small></button><button data-action="tool-clear-notes">${icon('erase')}<strong>清空笔记</strong><small>只清理候选，可撤销</small></button><button data-action="tool-redo" ${game.future.length?'':'disabled'}>${icon('redo')}<strong>重做一步</strong><small>恢复刚撤销的操作</small></button></div><div class="menu-group spaced">${menuRow('settings-controls','pointer','数字键盘与输入','双排大键 / 单排，连续填写')}${menuRow('settings-appearance','palette','外观与光影','让棋盘更合你的心意')}${menuRow('restart','restart','重新挑战本关','当前填写将重置，成绩保留')}</div>`);}
   function checkWin() {
-    if(demo||game.completed||!game.board.every((v,i)=>v===Number(game.solution[i])))return;
-    game.completed=true;const stars=game.aiFilled?1:game.mistakes===0&&game.hints===0?3:game.mistakes<=3&&game.hints<=3?2:1;
+    if(demo||game.completed||game.failed||!game.board.every((v,i)=>v===Number(game.solution[i])))return;
+    game.completed=true;const points=journalWin();const stars=game.aiFilled?1:game.mistakes===0&&game.hints===0?3:game.mistakes<=3&&game.hints<=3?2:1;
+    if(challengeInfo()){challengeWin(stars,points);return;}
     if(!isPractice()){
       const prev=data.results[game.key],assisted=!!game.aiFilled,keepBest=prev&&(prev.stars>stars||(!prev.aiAssisted&&assisted));
       data.results[game.key]={stars:Math.max(stars,prev?.stars||0),time:keepBest?prev.time:prev&&prev.aiAssisted===assisted?Math.min(prev.time,Math.floor(game.elapsed)):Math.floor(game.elapsed),mistakes:keepBest?prev.mistakes:game.mistakes,hints:keepBest?prev.hints:game.hints,aiAssisted:keepBest?prev.aiAssisted:assisted,independent:!!prev?.independent||(!assisted&&!game.hints),date:dateKey(),clears:(prev?.clears||0)+1};
     }
     save();render();feedback('win');celebrate();
     openModal('win',isPractice()?'练习完成':!isDaily()&&currentId()===100?'你已抵达，归一之境':'这一刻，思路通明','A LITTLE VICTORY',`<div class="win-content"><div class="win-mark">${icon('trophy')}</div><div class="win-stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div><h3>${isPractice()?'一次很好的思维热身':isDaily()?'今日的专注，已收获':'第 '+currentId()+' 关，完成'}</h3><p>${isPractice()?'这次练习不计闯关进度，可以回到旅程继续挑战。':currentId()===100&&!isDaily()?'一百道谜题之后，你已经走过从入门到宗师的旅程。':'不用急着向前，先为自己的这一步感到开心。'}</p><div class="stats-grid"><div class="stat-box"><strong>${formatTime(game.elapsed)}</strong><span>用时</span></div><div class="stat-box"><strong>${game.mistakes}</strong><span>错误</span></div><div class="stat-box"><strong>${game.hints}</strong><span>提示</span></div></div><div class="modal-actions"><button class="secondary" data-action="levels">关卡地图</button><button class="primary" data-action="next-level">${!isDaily()&&!isPractice()&&currentId()<100?'前往下一关':'继续进阶之旅'} ${icon('chevron')}</button></div></div>`);
+    if(!game.hints&&!game.aiFilled){const reward=document.createElement('div');reward.className='reward-card';reward.innerHTML=icon('sparkles')+`<span>${points?'收下这一束星光':'这一关的星光已收集'}<small>${constellation()} · 累计 ${data.atelier.points} 星尘</small></span><b>+${points}</b>`;$('modal-content').querySelector('.win-content>p').after(reward);}
     if(game.aiFilled){$('modal-title').textContent='AI 辅助完成';$('modal-content').querySelector('.win-content>p').textContent='本次由 AI 辅助作答，记录为 1 星。也可以重玩这一关，尝试独立解开。';const stat=$('modal-content').querySelector('.stat-box:last-child');stat.querySelector('strong').textContent=game.aiFilled;stat.querySelector('span').textContent='AI 填写';}
   }
   function celebrate() {if(!data.settings.motion||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const c=$('celebration');c.innerHTML=Array.from({length:35},()=>`<span class="confetti" style="left:${Math.random()*100}%;background:${['#c5aedf','#e4c7a0','#aecabd','#d7bfce'][Math.floor(Math.random()*4)]};animation-delay:${Math.random()*.45}s;animation-duration:${1.7+Math.random()}s"></span>`).join('');setTimeout(()=>c.innerHTML='',3500);}
-  function restart() {confirmAction('重新开始这一关？','这一关的数字、笔记与计时将重新开始，星星和解锁进度保留。旧版棋盘将进入重新分级的新版题目。','重新开始',()=>{if(demo)endDemo(false);const key=game.key;data.games[key]=makeGame(isDaily()?game:LEVELS[currentId()-1],key);game=null;load(key);});}
+  function restart() {confirmAction('重新开始这一关？','这一关的数字、笔记与计时将重新开始，星星和解锁进度保留。旧版棋盘将进入重新分级的新版题目。','重新开始',()=>{if(demo)endDemo(false);const key=game.key;data.games[key]=makeGame(isDaily()||challengeInfo()?game:LEVELS[currentId()-1],key);game=null;load(key);});}
   function exportSave() {
     save();const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`数独境-存档-${dateKey()}.json`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('存档已准备下载');
   }
+  const MODES = {
+    sprint:{title:'三分钟速解',icon:'zap',tag:'180 秒',copy:'让直觉热身，让思路提速。',levels:[3,6,10],rules:['在 3 分钟内完成棋盘。打开面板、暂停和离开页面都会暂停计时。','使用提示或 AI 作答后转为辅助练习，不记录独立挑战成绩。']},
+    perfect:{title:'一笔不差',icon:'shield',tag:'零失误',copy:'每一次落笔，都经过思考。',levels:[15,25,40],rules:['不限时，第一次填错即结束本次挑战。可以随时重新开始。','自动笔记与只读分析可用；应用提示或 AI 作答后只记辅助练习。']},
+    zen:{title:'禅意练习',icon:'leaf',tag:'不赶时间',copy:'把时间放下，只和数字相处。',levels:[10,40,70],rules:['隐藏计时，不设失败条件。难度随心选，进度自动保存。','支持提示、AI 与撤销；辅助通关会如实标记。']}
+  };
+  let modeChoice='sprint',modeDifficulty=1,panelEpoch=0,panelClosing=false,navLensReady=false;
+  const M=window.AtelierMotion;
+  function challengeInfo(key=game?.key){const m=/^challenge-(sprint|perfect|zen)-([1-3])-(\d{4}-\d{2}-\d{2})$/.exec(key||'');return m?{kind:m[1],difficulty:Number(m[2]),day:m[3],...MODES[m[1]]}:null;}
+  function modeKey(kind=modeChoice,difficulty=modeDifficulty){return `challenge-${kind}-${difficulty}-${dateKey()}`;}
+  function modePuzzle(key){const m=challengeInfo(key);if(!m)return null;const p=LEVELS[m.levels[m.difficulty-1]-1],seed=Number(m.day.replaceAll('-',''))+m.difficulty*101;const digits=S.shuffle([1,2,3,4,5,6,7,8,9],S.random(seed));const remap=s=>[...s].map(n=>n==='0'?'0':digits[Number(n)-1]).join('');return {...p,puzzle:remap(p.puzzle),solution:remap(p.solution)};}
+  function todayJournal(){const day=dateKey();if(!data.atelier.days[day])data.atelier.days[day]={cells:0,peak:0,wins:0,units:0,claimed:[]};return data.atelier.days[day];}
+  function quests(){const d=todayJournal();return [{id:'cells',title:'一格一束光',copy:'独立填对 12 个不同空格',value:d.cells,target:12,points:15,icon:'sparkles'},{id:'steady',title:'找到你的节奏',copy:'连续正确填写 5 个新空格',value:d.peak,target:5,points:20,icon:'zap'},{id:'win',title:'今日的小圆满',copy:'不使用提示或 AI 作答，完成一局',value:d.wins,target:1,points:30,icon:'trophy'}];}
+  function earnedDays(){return Object.keys(data.atelier.days).filter(k=>data.atelier.days[k].cells>0);}
+  function dailyStreak(){let count=0,d=new Date();const days=new Set(earnedDays());if(!days.has(dateKey()))d.setDate(d.getDate()-1);for(let n=0;n<366;n++){const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;if(!days.has(k))break;count++;d.setDate(d.getDate()-1);}return count;}
+  function constellation(){const points=data.atelier.points;return points>=600?'星河旅人':points>=250?'追光者':points>=100?'微光收藏家':'拾光初心者';}
+  function claimQuests(){const d=todayJournal();for(const q of quests())if(q.value>=q.target&&!d.claimed.includes(q.id)){d.claimed.push(q.id);data.atelier.points+=q.points;toast(`「${q.title}」达成 · +${q.points} 星尘`);}renderInspiration();}
+  function journalMove(n,correct){
+    if(!n||demo)return;
+    if(!correct){game.streak=0;return;}
+    const independent=!game.hints&&!game.aiFilled;
+    game.credited=game.credited||[];
+    if(!game.credited.includes(selected)){
+      game.credited.push(selected);game.streak=(game.streak||0)+1;game.peakStreak=Math.max(game.peakStreak||0,game.streak);
+      if(independent){const d=todayJournal();const token=game.key+':'+selected;if(!data.atelier.moves.includes(token)){data.atelier.moves.push(token);d.cells++;d.peak=Math.max(d.peak,game.streak);}}
+    }
+    const fresh=[];game.units=game.units||[];
+    S.units.forEach((u,i)=>{if(u.includes(selected)&&!game.units.includes(i)&&u.every(j=>game.board[j]===Number(game.solution[j]))){game.units.push(i);fresh.push(...u);}});
+    if(fresh.length){for(const i of new Set(fresh)){$('board').children[i].classList.remove('unit-glow');requestAnimationFrame(()=>$('board').children[i].classList.add('unit-glow'));}if(independent)todayJournal().units+=fresh.length/9;}
+    claimQuests();
+  }
+  function journalWin(){if(game.hints||game.aiFilled)return 0;const token=game.key;if(data.atelier.wins.includes(token))return 0;data.atelier.wins.push(token);todayJournal().wins++;data.atelier.points+=10;claimQuests();return 10;}
+  function renderInspiration(){
+    if(!$('inspiration-bar'))return;const d=todayJournal(),m=challengeInfo();
+    $('inspiration-title').textContent=m?'换一种节奏，继续探索':'今天，也给思绪一点光';
+    $('inspiration-copy').textContent=`${constellation()} · ${data.atelier.points} 星尘`;
+    $('inspiration-progress').innerHTML=`${d.claimed.length}/3 目标 ${icon('chevron')}`;
+    const progress=game?game.board.filter((v,i)=>!Number(game.puzzle[i])&&v===Number(game.solution[i])).length/(81-[...game.puzzle].filter(n=>n!=='0').length)*100:0;
+    $('board-progress-fill').style.width=Math.min(100,progress)+'%';
+    const ribbon=$('focus-ribbon');ribbon.hidden=!m;
+    if(m){ribbon.className='focus-ribbon '+m.kind+(m.kind==='sprint'&&game.elapsed>=150?' urgent':'');$('focus-label').innerHTML=icon(m.icon)+m.title;$('focus-value').textContent=game.failed?'本次已结束':game.completed?'已完成':m.kind==='sprint'?formatTime(Math.max(0,180-game.elapsed)):m.kind==='perfect'?(game.hints||game.aiFilled?'辅助练习':'零失误挑战'):'此刻，刚刚好';}
+    if(game){$('combo-pill').hidden=!(game.streak>=3)&&!m;$('combo-pill').innerHTML=game.streak>=3?`${icon('sparkles')}<strong>${game.streak}</strong> 连续正确`:'';}
+    document.body.classList.toggle('zen-play',m?.kind==='zen');
+  }
+  function showChallenges(){
+    const d=todayJournal();
+    openModal('challenges','给今天，一点新鲜感','THE DAILY ATELIER',`<div class="arcade-hero"><div><span class="eyebrow">PLAY IN YOUR OWN WAY</span><h3>换种节奏。<br>发现新乐趣。</h3><p>可以追逐灵感，<br>也可以只享受此刻。</p></div><span class="arcade-orb">${icon('sparkles')}</span></div><div class="mode-grid">${Object.entries(MODES).map(([k,m])=>`<button class="mode-card ${k}" data-mode="${k}">${icon(m.icon)}<b>${m.tag}</b><strong>${m.title}</strong><small>${m.copy}</small></button>`).join('')}<button class="mode-card daily" data-action="daily">${icon('sun')}<b>每日更新</b><strong>每日一题</strong><small>每天一题，留下你的专注足迹。</small></button></div><div class="section-heading"><span>今日小目标</span><small>${d.claimed.length} / 3 已点亮</small></div>${questMarkup()}<div class="star-points"><div><strong>${data.atelier.points} <span>✦</span></strong><small>已收集星尘 · ${constellation()}</small></div><span>连续专注 ${dailyStreak()} 天</span></div><p class="resume-note">目标每天按本机日期更新 · 星尘自动领取<br>撤销、重填同一格不会重复计入目标</p>`);
+  }
+  function questMarkup(){return `<div class="quest-list">${quests().map(q=>`<div class="quest ${q.value>=q.target?'done':''}"><span class="quest-icon">${icon(q.value>=q.target?'check':q.icon)}</span><div><strong>${q.title}</strong><p>${q.copy}</p><div class="quest-track"><i style="width:${Math.min(100,q.value/q.target*100)}%"></i></div></div><span>${q.value>=q.target?'✓ +'+q.points:Math.min(q.value,q.target)+'/'+q.target}</span></div>`).join('')}</div>`;}
+  function showMode(kind=modeChoice,difficulty=modeDifficulty){
+    modeChoice=kind;modeDifficulty=difficulty;const m=MODES[kind],key=modeKey(),saved=data.games[key],record=data.results[key],p=modePuzzle(key);
+    openModal('mode-detail',m.title,'A DIFFERENT KIND OF FOCUS',`<div class="mode-detail-symbol">${icon(m.icon)}</div><p class="mode-description">${m.copy}<br>${81-p.clues} 个空格 · 每日同难度为同一道题</p><p class="section-label">选择今天的手感</p><div class="choice-cards">${['轻松','适中','深入'].map((label,i)=>`<button class="choice-card ${difficulty===i+1?'chosen':''}" data-mode-difficulty="${i+1}" aria-pressed="${difficulty===i+1}"><span class="choice-sample">${['·','··','···'][i]}</span><strong>${label}</strong><small>${kind==='sprint'?['观察热身','节奏加快','完整挑战'][i]:['轻轻开始','多想一步','深入推理'][i]}</small><b>${icon('check')}</b></button>`).join('')}</div><div class="mode-rules">${m.rules.map(s=>`<span>${icon('check')}${s}</span>`).join('')}</div>${record?`<div class="reward-card">${icon('trophy')}<span>${record.independent?'独立挑战已完成':'已完成辅助练习'}<small>${kind==='zen'?'已留下这段专注时光':'最佳用时 '+formatTime(record.time)}</small></span><b>${'★'.repeat(record.stars)}</b></div>`:''}<button class="primary" data-action="start-mode">${saved&&!saved.completed&&!saved.failed?'继续这次挑战':saved?'再来一次':'开始体验'} ${icon('chevron')}</button><p class="resume-note">这三种玩法单独存档，不影响百关解锁进度。</p>`);
+  }
+  function startMode(){const key=modeKey(),old=data.games[key];if(old&&(old.completed||old.failed)){data.games[key]=makeGame(modePuzzle(key),key);if(game?.key===key)game=null;}load(key);}
+  function failChallenge(reason){if(game.failed||game.completed||demo)return;game.failed=true;game.streak=0;save();renderBoard();openModal('challenge-end','换口气，再来一次','A PAUSE, NOT THE END',`<div class="mode-detail-symbol">${icon(challengeInfo().icon)}</div><p class="mode-description">${reason}<br>每一次尝试，都在帮你找到自己的节奏。</p><div class="stats-grid"><div class="stat-box"><strong>${formatTime(game.elapsed)}</strong><span>专注用时</span></div><div class="stat-box"><strong>${game.board.filter((v,i)=>!Number(game.puzzle[i])&&v===Number(game.solution[i])).length}</strong><span>已填对</span></div><div class="stat-box"><strong>${game.peakStreak||0}</strong><span>最佳连续正确</span></div></div><div class="modal-actions"><button class="secondary" data-action="challenges">换个玩法</button><button class="primary" data-action="retry-mode">重新挑战</button></div>`);}
+  function retryMode(){const key=game.key;data.games[key]=makeGame(modePuzzle(key),key);game=null;load(key);}
+  function challengeWin(stars,points){
+    const m=challengeInfo(),assisted=!!(game.hints||game.aiFilled),prev=data.results[game.key];
+    if(!prev||(!assisted&&!prev.independent)||(prev.independent===!assisted&&game.elapsed<prev.time))data.results[game.key]={stars:assisted?1:stars,time:Math.floor(game.elapsed),mistakes:game.mistakes,hints:game.hints,aiAssisted:!!game.aiFilled,independent:!assisted,date:dateKey(),clears:(prev?.clears||0)+1};
+    save();render();feedback('win');celebrate();
+    openModal('challenge-win',assisted?'完成了一次辅助练习':'漂亮，做到了。','YOUR MOMENT TO SHINE',`<div class="win-content"><div class="win-mark">${icon(m.icon)}</div><div class="win-stars">${'★'.repeat(assisted?1:stars)}</div><h3>${m.title} · 完成</h3><p>${assisted?'这次使用了提示或 AI 作答，不计独立挑战。':m.kind==='zen'?'不必追赶时间，专注本身就是收获。':'你把观察和判断，变成了漂亮的答案。'}</p><div class="stats-grid"><div class="stat-box"><strong>${m.kind==='zen'?'∞':formatTime(game.elapsed)}</strong><span>${m.kind==='zen'?'从容模式':'用时'}</span></div><div class="stat-box"><strong>${game.peakStreak||0}</strong><span>连续正确</span></div><div class="stat-box"><strong>+${points}</strong><span>通关星尘</span></div></div><div class="modal-actions"><button class="secondary" data-action="retry-mode">再玩一次</button><button class="primary" data-action="challenges">探索更多</button></div></div>`);
+  }
+  function syncNavLens(){const nav=document.querySelector('.mobile-nav'),lens=$('nav-lens'),active=nav.querySelector('button.active');if(!active||!nav.offsetWidth)return;const x=active.offsetLeft,y=active.offsetTop;lens.style.width=active.offsetWidth+'px';lens.style.height=active.offsetHeight+'px';if(!navLensReady){M.set(lens,{x,y});navLensReady=true;}else M.to(lens,{x,y},{stiffness:460,damping:40});}
+  function celebrationMotion(){if(!M.enabled())return;const mark=$('modal-content').querySelector('.win-mark');if(mark){M.set(mark,{scale:.7,opacity:0});M.to(mark,{scale:1,opacity:1},{stiffness:230,damping:25});}}
+
   const actions={
+    challenges:showChallenges,'start-mode':startMode,'retry-mode':retryMode,
     close:closeModal,back:backPanel,levels:()=>showLevels(),settings:showSettings,help:showLearn,tools:showTools,stats:()=>showStats(),daily:showDaily,pause:()=>{if(demo){endDemo();toast('已返回你的棋盘');return;}paused=!paused;lastTick=performance.now();renderBoard();save();},resume:()=>{paused=false;lastTick=performance.now();renderBoard();},
     undo:()=>history('undo'),redo:()=>history('redo'),erase:()=>input(0),notes:()=>{if(!canEdit())return;noteMode=!noteMode;renderBoard();},'auto-notes':autoNotes,hint:showHint,'apply-hint':applyHint,
     ai:showAIHome,'ai-demo':showAI,analyze:analyzeBoard,answer:()=>showAnswer('one'),'apply-answer':applyAnswer,'ai-toggle':toggleAI,'ai-step':()=>{stopAI();aiStep();},'ai-return':()=>{endDemo();backPanel();toast('原棋盘已完整保留');},
@@ -373,6 +456,8 @@
     confirm:()=>{const fn=pendingConfirm;pendingConfirm=null;closeModal();if(fn)fn();},restart,export:exportSave,import:()=>{$('import-file').value='';$('import-file').click();}
   };
   document.addEventListener('click',e=>{
+    const mode=e.target.closest('[data-mode]');if(mode){showMode(mode.dataset.mode,1);return;}
+    const difficulty=e.target.closest('[data-mode-difficulty]');if(difficulty){showMode(modeChoice,Number(difficulty.dataset.modeDifficulty));return;}
     const cell=e.target.closest('[data-cell]');if(cell){selectCell(Number(cell.dataset.cell));return;}
     const num=e.target.closest('[data-number]');if(num){const n=Number(num.dataset.number);if(data.settings.inputMode==='number'){heldNumber=heldNumber===n?0:n;renderBoard();}else input(n);return;}
     const preference=e.target.closest('[data-preference]');if(preference){const key=preference.dataset.preference;data.settings[key]=preference.dataset.value;if(key==='inputMode')heldNumber=0;applySettings();renderBoard();save();document.querySelectorAll(`[data-preference="${key}"]`).forEach(el=>{const chosen=el.dataset.value===data.settings[key];el.classList.toggle('chosen',chosen);el.setAttribute('aria-pressed',String(chosen));});feedback();return;}
@@ -380,7 +465,7 @@
     const lesson=e.target.closest('[data-lesson]');if(lesson){showLesson(Number(lesson.dataset.lesson));return;}
     const practice=e.target.closest('[data-target-level]');if(practice){chooseLevel(Number(practice.dataset.targetLevel));return;}
     const action=e.target.closest('[data-action]');if(action){actions[action.dataset.action]?.();return;}
-    const nav=e.target.closest('[data-nav]');if(nav){({play:closeModal,journey:()=>showLevels(),daily:showDaily,learn:showLearn,stats:()=>showStats(),profile:showProfile,ai:showAIHome})[nav.dataset.nav]();return;}
+    const nav=e.target.closest('[data-nav]');if(nav){({play:closeModal,journey:()=>showLevels(),daily:showChallenges,learn:showLearn,stats:()=>showStats(),profile:showProfile,ai:showAIHome})[nav.dataset.nav]();return;}
     const chapter=e.target.closest('[data-chapter]');if(chapter){showLevels(Number(chapter.dataset.chapter));return;}
     const level=e.target.closest('[data-level]');if(level){chooseLevel(Number(level.dataset.level));return;}
     const brand=e.target.closest('.brand');if(brand){e.preventDefault();showLevels();}
@@ -409,21 +494,17 @@
     else if(e.key.startsWith('Arrow')){e.preventDefault();if(paused||demo)return;const i=selected<0?0:selected,r=Math.floor(i/9),c=i%9;selected=e.key==='ArrowLeft'?r*9+(c+8)%9:e.key==='ArrowRight'?r*9+(c+1)%9:e.key==='ArrowUp'?((r+8)%9)*9+c:((r+1)%9)*9+c;hintFocus=[];renderBoard();$('board').children[selected].focus({preventScroll:true});}
   });
   document.addEventListener('visibilitychange',()=>{if(document.hidden){if(aiRunning)stopAI();save();}lastTick=performance.now();});
-  function settleSheet(target,velocity=0,finish){
-    cancelAnimationFrame(dragFrame);const el=$('modal');let y=Number(el.dataset.drag||0),v=velocity,last=performance.now();
-    const step=now=>{if(!el.open)return;const dt=Math.min((now-last)/1000,.032);last=now;v+=((target-y)*380-v*37)*dt;y+=v*dt;el.dataset.drag=String(y);el.style.transform=`translateY(${y}px)`;
-      if(Math.abs(y-target)<.4&&Math.abs(v)<4){el.style.transform='';el.dataset.drag='0';finish?.();return;}dragFrame=requestAnimationFrame(step);};
-    if(!data.settings.motion||matchMedia('(prefers-reduced-motion: reduce)').matches){el.style.transform='';el.dataset.drag='0';finish?.();return;}dragFrame=requestAnimationFrame(step);
-  }
-  $('sheet-handle').addEventListener('pointerdown',e=>{cancelAnimationFrame(dragFrame);const el=$('modal'),transform=getComputedStyle(el).transform,y=transform==='none'?0:new DOMMatrixReadOnly(transform).m42;el.getAnimations().forEach(a=>a.cancel());el.dataset.drag=String(y);el.style.transform=`translateY(${y}px)`;drag={id:e.pointerId,start:e.clientY-y,y,last:e.clientY,time:performance.now(),velocity:0};e.currentTarget.setPointerCapture(e.pointerId);});
-  $('sheet-handle').addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const now=performance.now(),dy=e.clientY-drag.start;drag.velocity=(e.clientY-drag.last)/Math.max(8,now-drag.time)*1000;drag.last=e.clientY;drag.time=now;drag.y=dy<0?dy*.12:dy;$('modal').style.transform=`translateY(${drag.y}px)`;$('modal').dataset.drag=String(drag.y);});
-  function endSheetDrag(e){if(!drag||e.pointerId!==drag.id)return;const d=drag;drag=null;const dismiss=e.type!=='pointercancel'&&(d.y>95||d.y>22&&d.velocity>550);settleSheet(dismiss?Math.min(innerHeight*.8,650):0,d.velocity,dismiss?()=>backPanel():undefined);}
+  function settleSheet(target,velocity=0,finish){M.to($('modal'),{y:target,opacity:1,scale:1},{velocity:{y:velocity},stiffness:420,damping:36,done:finish});}
+  $('sheet-handle').addEventListener('pointerdown',e=>{cancelAnimationFrame(dragFrame);panelEpoch++;panelClosing=false;$('modal').classList.remove('is-closing');const el=$('modal');M.stop(el);const transform=getComputedStyle(el).transform,y=transform==='none'?0:new DOMMatrixReadOnly(transform).m42;el.getAnimations().forEach(a=>a.cancel());M.set(el,{y,opacity:1,scale:1});el.dataset.drag=String(y);drag={id:e.pointerId,start:e.clientY-y,y,last:e.clientY,time:performance.now(),velocity:0};e.currentTarget.setPointerCapture(e.pointerId);});
+  $('sheet-handle').addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const now=performance.now(),dy=e.clientY-drag.start;drag.velocity=(e.clientY-drag.last)/Math.max(8,now-drag.time)*1000;drag.last=e.clientY;drag.time=now;drag.y=dy<0?(dy*innerHeight*.3)/(innerHeight+Math.abs(dy)*.3):dy;M.set($('modal'),{y:drag.y});$('modal').dataset.drag=String(drag.y);});
+  function endSheetDrag(e){if(!drag||e.pointerId!==drag.id)return;const d=drag;drag=null;if(performance.now()-d.time>90)d.velocity=0;M.get($('modal')).v.y=d.velocity;const dismiss=e.type!=='pointercancel'&&d.y>12&&d.y+d.velocity*.16>130;if(dismiss&&panelStack.length){backPanel();}else if(dismiss){closeModal();}else settleSheet(0,d.velocity);}
   $('sheet-handle').addEventListener('pointerup',endSheetDrag);$('sheet-handle').addEventListener('pointercancel',endSheetDrag);
   document.addEventListener('pointerdown',e=>{const key=e.target.closest('.number-key');if(key){const r=key.getBoundingClientRect();key.style.setProperty('--press-x',(e.clientX-r.left)+'px');key.style.setProperty('--press-y',(e.clientY-r.top)+'px');}});
   window.addEventListener('pagehide',save);
   window.addEventListener('beforeunload',save);
   let saveTicks=0;
-  setInterval(()=>{const now=performance.now(),delta=Math.min((now-lastTick)/1000,2);lastTick=now;if(game&&!paused&&!screen&&!demo&&!document.hidden&&!game.completed){game.elapsed+=delta;$('timer').textContent=formatTime(game.elapsed);if(++saveTicks%5===0)save();}},500);
+  setInterval(()=>{const now=performance.now(),delta=Math.min((now-lastTick)/1000,2);lastTick=now;if(game&&!paused&&!screen&&!demo&&!document.hidden&&!game.completed&&!game.failed&&!panelClosing){game.elapsed+=delta;$('timer').textContent=challengeInfo()?.kind==='zen'?'∞':formatTime(game.elapsed);if(challengeInfo()?.kind==='sprint'&&game.elapsed>=180){game.elapsed=180;failChallenge('三分钟到了，这次的思考值得保留。');}renderInspiration();if(++saveTicks%5===0)save();}},500);
+  window.addEventListener('resize',syncNavLens);
   mount();
   if('serviceWorker' in navigator && /^https?:$/.test(location.protocol))navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();

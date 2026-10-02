@@ -5,13 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f6f5fa">
   <meta name="description" content="数独·境，一百关从入门到大师的数独之旅。逐步提示、AI 大师、每日挑战，离线也能玩。">
-  <title>数独 · 境 2.0 | 100 关思维之旅</title>
+  <title>数独 · 境 3.0 | 100 关思维之旅</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="experience.css">
   <script defer src="engine.js"></script>
   <script defer src="levels.js"></script>
+  <link rel="stylesheet" href="atelier.css">
+  <script defer src="motion.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -22,7 +24,7 @@
       <div class="sidebar-intro">给思绪，一点留白。</div>
       <nav class="desktop-nav" aria-label="主导航">
         <button class="nav-item active" data-nav="journey"><i data-icon="grid"></i><span>进阶之旅<small>100 个小小的突破</small></span><b>100</b></button>
-        <button class="nav-item" data-nav="daily"><i data-icon="sun"></i><span>每日一题<small>每天，新的灵感</small></span></button>
+        <button class="nav-item" data-nav="daily"><i data-icon="sun"></i><span>灵感游乐场<small>三种玩法 · 每日小目标</small></span></button>
         <button class="nav-item" data-nav="learn"><i data-icon="book"></i><span>技巧课堂<small>从会玩，到会思考</small></span></button>
         <button class="nav-item" data-nav="stats"><i data-icon="chart"></i><span>我的成就<small>记录每一次成长</small></span></button>
       </nav>
@@ -34,10 +36,11 @@
       <header class="mobile-header"><a class="brand" href="#"><span class="brand-mark">境</span><span>数独 · 境</span></a><div><button class="icon-button" data-action="help" aria-label="玩法说明"><i data-icon="help"></i></button><button class="icon-button" data-action="settings" aria-label="游戏设置"><i data-icon="settings"></i></button></div></header>
       <div class="play-layout">
         <section class="game-card glass" aria-label="数独游戏">
+          <button class="inspiration-bar" id="inspiration-bar" data-action="challenges"><span class="inspiration-orb"><i data-icon="sparkles"></i></span><span><strong id="inspiration-title">今天，也给思绪一点光</strong><small id="inspiration-copy">探索三种新玩法</small></span><b id="inspiration-progress">0/3 目标</b></button><div id="focus-ribbon" class="focus-ribbon" hidden><span id="focus-label"></span><b id="focus-value"></b><button data-action="challenges">切换</button></div>
           <div class="level-heading"><div><span class="eyebrow" id="chapter-label">CHAPTER 01 · 初见</span><h2 id="level-title">第 01 关 <span>轻轻启程</span></h2></div><button class="level-switch" data-action="levels">关卡地图 <i data-icon="chevron"></i></button></div>
           <div class="game-meta"><span class="difficulty"><span id="difficulty-dots"></span><span id="difficulty-label">入门</span></span><div class="meta-actions"><span id="mistakes" title="累计错误，不限制尝试次数">错误 0</span><button class="timer-button" data-action="pause" aria-label="暂停游戏"><i data-icon="clock"></i><span id="timer">00:00</span><i data-icon="pause"></i></button></div></div>
-          <div class="board-wrap"><div id="board" class="board" role="grid" aria-label="9乘9数独棋盘"></div><div class="pause-cover" id="pause-cover" hidden><span class="pause-orbit"><i data-icon="moon"></i></span><h3>给大脑放个小假</h3><p>棋盘和时间，都在这里等你。</p><button class="primary" data-action="resume"><i data-icon="play"></i>继续游戏</button></div></div>
-          <div class="board-caption"><span id="board-status"><span class="status-dot"></span>选择一个空格，开始吧</span><button class="tiny-button" data-action="redo" id="redo-button" aria-label="重做"><i data-icon="redo"></i>重做</button></div>
+          <div class="board-wrap"><div id="board" class="board" role="grid" aria-label="9乘9数独棋盘"></div><div class="board-progress"><span id="board-progress-fill"></span></div><div class="pause-cover" id="pause-cover" hidden><span class="pause-orbit"><i data-icon="moon"></i></span><h3>给大脑放个小假</h3><p>棋盘和时间，都在这里等你。</p><button class="primary" data-action="resume"><i data-icon="play"></i>继续游戏</button></div></div>
+          <div class="board-caption"><span id="board-status"><span class="status-dot"></span>选择一个空格，开始吧</span><span id="combo-pill" class="streak-pill" hidden></span><button class="tiny-button" data-action="redo" id="redo-button" aria-label="重做"><i data-icon="redo"></i>重做</button></div>
           <div class="tool-row">
             <button class="tool" data-action="undo" id="undo-button"><i data-icon="undo"></i><span>撤销</span></button>
             <button class="tool" data-action="erase"><i data-icon="erase"></i><span>擦除</span></button>
@@ -59,7 +62,7 @@
       <footer class="page-footer"><span>一格一世界，专注即远方。</span><span>SUDOKU ATELIER <b>✦</b></span></footer>
     </main>
   </div>
-  <nav class="mobile-nav glass" aria-label="手机导航"><button class="active" data-nav="play"><i data-icon="grid"></i><span>棋盘</span></button><button data-nav="journey"><i data-icon="compass"></i><span>旅程</span></button><button class="nav-master" data-nav="ai"><i data-icon="sparkles"></i><span>AI 大师</span></button><button data-nav="learn"><i data-icon="book"></i><span>学堂</span></button><button data-nav="profile"><i data-icon="user"></i><span>我的</span></button></nav>
+  <nav class="mobile-nav glass" aria-label="手机导航"><span id="nav-lens" class="nav-lens" aria-hidden="true"></span><button class="active" data-nav="play"><i data-icon="grid"></i><span>棋盘</span></button><button data-nav="journey"><i data-icon="compass"></i><span>旅程</span></button><button class="nav-master" data-nav="ai"><i data-icon="sparkles"></i><span>AI 大师</span></button><button data-nav="learn"><i data-icon="book"></i><span>学堂</span></button><button data-nav="profile"><i data-icon="user"></i><span>我的</span></button></nav>
   <dialog id="modal" aria-labelledby="modal-title"><div class="sheet-handle" id="sheet-handle" aria-hidden="true"><span></span></div><div class="modal-header"><button class="icon-button sheet-back" id="panel-back" data-action="back" aria-label="返回上一级" hidden><i data-icon="back"></i></button><div class="sheet-titles"><span class="eyebrow" id="modal-eyebrow"></span><h2 id="modal-title"></h2></div><button class="icon-button" data-action="close" aria-label="收起全部面板"><i data-icon="close"></i></button></div><div class="panel-trail" id="panel-trail" hidden></div><div id="modal-content"></div></dialog>
   <div id="toast" role="status" aria-live="polite"></div><div id="celebration" aria-hidden="true"></div>
   <input type="file" id="import-file" accept=".json,application/json" hidden>
